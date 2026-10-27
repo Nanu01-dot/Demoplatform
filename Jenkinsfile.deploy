@@ -1,0 +1,32 @@
+// JOB 3: demo-3-deploy -> deploy 3 services to Kubernetes
+pipeline {
+  agent any
+  parameters { string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Image tag to deploy') }
+  environment {
+    DOCKERHUB_USER = 'YOUR_DOCKERHUB_USER'
+    SERVICES = 'product-service order-service user-service'
+  }
+  stages {
+    stage('Checkout') {
+      steps {
+        git branch: 'main', credentialsId: 'github-creds',
+            url: 'https://github.com/YOUR_GITHUB_USER/demo-platform.git'
+      }
+    }
+    stage('Deploy to Kubernetes') {
+      steps {
+        withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+          sh '''
+            for svc in $SERVICES; do
+              sed -e "s|DOCKERHUB_USER|$DOCKERHUB_USER|g" -e "s|IMAGE_TAG|$IMAGE_TAG|g" $svc/k8s/deployment.yaml > /tmp/$svc-deploy.yaml
+              kubectl apply -f /tmp/$svc-deploy.yaml
+              kubectl apply -f $svc/k8s/service.yaml
+              kubectl rollout status deployment/$svc --timeout=180s
+            done
+            kubectl get pods,svc
+          '''
+        }
+      }
+    }
+  }
+}

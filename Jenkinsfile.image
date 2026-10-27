@@ -1,0 +1,41 @@
+// JOB 2: demo-2-image -> build jars, build & push 3 docker images
+pipeline {
+  agent any
+  tools { maven 'Maven3'; jdk 'JDK17' }
+  parameters { string(name: 'IMAGE_TAG', defaultValue: 'latest', description: 'Docker image tag') }
+  environment {
+    DOCKERHUB_USER = 'YOUR_DOCKERHUB_USER'
+    SERVICES = 'product-service order-service user-service'
+  }
+  stages {
+    stage('Checkout') {
+      steps {
+        git branch: 'main', credentialsId: 'github-creds',
+            url: 'https://github.com/YOUR_GITHUB_USER/demo-platform.git'
+      }
+    }
+    stage('Package') {
+      steps { sh 'mvn -B clean package -DskipTests' }
+    }
+    stage('Docker Login') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                         usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+          sh 'echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin'
+        }
+      }
+    }
+    stage('Build & Push Images') {
+      steps {
+        sh '''
+          for svc in $SERVICES; do
+            docker build -t $DOCKERHUB_USER/$svc:$IMAGE_TAG -t $DOCKERHUB_USER/$svc:latest $svc
+            docker push $DOCKERHUB_USER/$svc:$IMAGE_TAG
+            docker push $DOCKERHUB_USER/$svc:latest
+          done
+        '''
+      }
+    }
+  }
+  post { always { sh 'docker logout || true' } }
+}

@@ -1,0 +1,29 @@
+// JOB 1: demo-1-checkout  -> checkout + build + test, then triggers image job
+pipeline {
+  agent any
+  tools { maven 'Maven3'; jdk 'JDK17' }   // names from Manage Jenkins > Tools
+  stages {
+    stage('Checkout') {
+      steps {
+        git branch: 'main',
+            credentialsId: 'github-creds',
+            url: 'https://github.com/YOUR_GITHUB_USER/demo-platform.git'
+      }
+    }
+    stage('Build & Test') {
+      steps { sh 'mvn -B clean verify' }
+    }
+    stage('Trigger Image Job') {
+      steps {
+        script {
+          def tag = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+          build job: 'demo-2-image', parameters: [string(name: 'IMAGE_TAG', value: tag)], wait: false
+        }
+      }
+    }
+  }
+  post {
+    success { echo 'Checkout + build OK' }
+    failure { echo 'Checkout/build FAILED' }
+  }
+}
